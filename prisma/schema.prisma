@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  company   String?
+  tier      String   @default("free")
+  password  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Alert {
+  id          String   @id @default(cuid())
+  title       String
+  severity    String
+  source      String
+  description String
+  category    String
+  createdAt   DateTime @default(now())
+}
+
+model Brief {
+  id          String   @id @default(cuid())
+  title       String
+  volume      Int
+  content     String
+  publishedAt DateTime @default(now())
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("new")
+  priority    String    @default("medium")
+  assignee    String?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
