@@ -8,6 +8,7 @@ export type AppView =
   | 'briefs'
   | 'monitoring'
   | 'workflow'
+  | 'agents'
 
 export interface User {
   id: string

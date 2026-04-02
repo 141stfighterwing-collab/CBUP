@@ -59,3 +59,83 @@ model Task {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
+
+model Agent {
+  id            String     @id @default(cuid())
+  agentId       String     @unique              // Unique agent identifier (GUID from agent)
+  hostname      String
+  domain        String?
+  osName        String
+  osVersion     String
+  osArch        String?
+  manufacturer  String?
+  model         String?
+  serialNumber  String?
+  biosVersion   String?
+  cpuModel      String?
+  cpuCores      Int?
+  totalRamMb    Int?
+  macAddresses  String?                         // JSON array
+  ipAddresses   String?                         // JSON array
+  status        String     @default("online")   // online, offline, warning, critical
+  lastSeen      DateTime   @default(now())
+  version       String     @default("1.0.0")    // Agent version
+  authToken     String?                         // For agent authentication
+  telemetry     Telemetry[]
+  commands      Command[]
+  edrScans      EDRScan[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Telemetry {
+  id           String   @id @default(cuid())
+  agentId      String
+  agent        Agent    @relation(fields: [agentId], references: [id])
+  cpuPercent   Float?
+  memPercent   Float?
+  memUsedMb    Float?
+  memTotalMb   Float?
+  diskReadBps  Float?
+  diskWriteBps Float?
+  netInBps     Float?
+  netOutBps    Float?
+  diskFreeGb   Float?
+  diskTotalGb  Float?
+  activeTcp    Int?
+  uptime       Int?                         // seconds
+  topCpuProcs  String?                      // JSON array of top processes
+  topMemProcs  String?                      // JSON array
+  timestamp    DateTime @default(now())
+
+  @@index([agentId, timestamp])
+}
+
+model Command {
+  id          String   @id @default(cuid())
+  agentId     String
+  agent       Agent    @relation(fields: [agentId], references: [id])
+  type        String                       // RUN_EDR_SCAN, RUN_CUSTOM_SCRIPT, etc.
+  payload     String?                      // JSON payload
+  status      String   @default("pending") // pending, executing, completed, failed
+  result      String?                      // JSON result
+  error       String?
+  createdAt   DateTime @default(now())
+  executedAt  DateTime?
+  completedAt DateTime?
+
+  @@index([agentId, status])
+}
+
+model EDRScan {
+  id          String   @id @default(cuid())
+  agentId     String
+  agent       Agent    @relation(fields: [agentId], references: [id])
+  scanType    String                       // process, service, port, autorun, vulnerability, full
+  status      String   @default("running") // running, completed, failed
+  findings    String                       // JSON array of findings
+  summary     String?                      // JSON summary
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+}

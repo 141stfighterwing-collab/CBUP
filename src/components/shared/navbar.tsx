@@ -17,6 +17,7 @@ const navItems = [
   { id: 'alerts' as const, label: 'Alerts' },
   { id: 'briefs' as const, label: 'Briefs' },
   { id: 'monitoring' as const, label: 'Monitoring' },
+  { id: 'agents' as const, label: 'Agents' },
   { id: 'workflow' as const, label: 'Workflow' },
 ]
 
