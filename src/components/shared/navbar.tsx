@@ -177,7 +177,8 @@ function TenantSelector() {
     let cancelled = false
     fetch('/api/tenants')
       .then(r => r.json())
-      .then((data) => {
+      .then((resp) => {
+        const data = resp?.success ? resp.data : (Array.isArray(resp) ? resp : null)
         if (!cancelled && Array.isArray(data)) {
           setTenants(data.map((t: any) => ({ id: t.id, name: t.name })))
         }
