@@ -27,7 +27,6 @@ import {
   Building2,
 } from 'lucide-react'
 import type { Agent } from '@/components/agents/types'
-import { generateMockAgents } from '@/components/agents/mock-data'
 import { C2CommandDialog } from '@/components/agents/c2-command-dialog'
 import { DeployAgentDialog } from '@/components/agents/deploy-agent-dialog'
 import { AgentCard } from '@/components/agents/agent-card'
@@ -71,12 +70,12 @@ export function AgentsView() {
       const res = await fetch('/api/agents/list')
       if (res.ok) {
         const data = await res.json()
-        setAgents(data)
+        setAgents(Array.isArray(data) ? data : (data?.agents || []))
       } else {
-        setAgents(generateMockAgents())
+        setAgents([])
       }
     } catch {
-      setAgents(generateMockAgents())
+      setAgents([])
     } finally {
       setLoading(false)
     }

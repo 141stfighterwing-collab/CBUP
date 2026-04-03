@@ -44,7 +44,7 @@ import {
   chartLabelStyle,
   chartTickStyle,
 } from './helpers'
-import { generateTelemetry, generateScans, generateCommands } from './mock-data'
+
 
 // ─── Agent Detail Panel ──────────────────────────────────────────────────────
 
@@ -58,9 +58,9 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
   const [telemetryHours, setTelemetryHours] = useState(1)
   const [cmdFilter, setCmdFilter] = useState<string>('all')
 
-  const telemetryData = useMemo(() => generateTelemetry(telemetryHours), [telemetryHours])
-  const scanData = useMemo(() => generateScans(), [])
-  const commandData = useMemo(() => generateCommands(), [])
+  const telemetryData = useMemo(() => [] as any[], [telemetryHours])
+  const scanData = useMemo(() => [] as any[], [])
+  const commandData = useMemo(() => [] as any[], [])
 
   const filteredCommands = cmdFilter === 'all'
     ? commandData
@@ -163,6 +163,10 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
             ))}
           </div>
 
+          {telemetryData.length === 0 && (
+            <div className="text-center py-8 text-xs text-muted-foreground">No telemetry data yet. Agent must be online and reporting.</div>
+          )}
+          {telemetryData.length > 0 && (<>
           {/* CPU Chart */}
           <Card className="border-border/50">
             <CardHeader className="pb-2">
@@ -229,6 +233,7 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
               </div>
             </CardContent>
           </Card>
+          </>)}
         </TabsContent>
 
         {/* EDR Scans Tab */}
@@ -238,6 +243,9 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
               <CardTitle className="text-sm font-semibold">EDR Scan History</CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-0">
+              {scanData.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground">No EDR scan data yet. Agent must be online and have completed scans.</div>
+              ) : (
               <div className="space-y-3">
                 {scanData.map((scan) => (
                   <div key={scan.id} className="rounded-lg border border-border/50 p-3 space-y-2">
@@ -273,6 +281,7 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
                   </div>
                 ))}
               </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -298,6 +307,9 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-0">
+              {commandData.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground">No command history yet. Send a command to this agent.</div>
+              ) : (
               <div className="space-y-2">
                 {filteredCommands.map((cmd) => (
                   <div key={cmd.id} className="rounded-lg border border-border/50 p-3 space-y-1.5">
@@ -332,6 +344,7 @@ function AgentDetailPanel({ agent, onCommand, onClose }: AgentDetailPanelProps) 
                   <p className="text-xs text-muted-foreground text-center py-6">No commands match the selected filter.</p>
                 )}
               </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

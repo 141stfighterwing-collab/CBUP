@@ -1,13 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import {
-  threatTrendData,
-  alertDistributionData,
-  severityBreakdownData,
-  activityLogData,
-} from '@/lib/mock-data'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -23,6 +18,8 @@ const typeColor: Record<string, string> = {
 }
 
 export function MonitoringView() {
+  const [monitorData, setMonitorData] = useState({ threatTrend: [] as any[], alertDistribution: [] as any[], severityBreakdown: [] as any[], activityLog: [] as any[] })
+
   return (
     <div className="space-y-6">
       <div>
@@ -75,8 +72,9 @@ export function MonitoringView() {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={threatTrendData}>
+                {monitorData.threatTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monitorData.threatTrend}>
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 11, fill: 'oklch(0.5 0.02 155)' }}
@@ -107,8 +105,11 @@ export function MonitoringView() {
                     activeDot={{ r: 5 }}
                   />
                 </LineChart>
-              </ResponsiveContainer>
-            </div>
+                </ResponsiveContainer>
+                ) : (
+                <div className="h-[250px] flex items-center justify-center text-xs text-muted-foreground">No monitoring data yet. Deploy agents to begin collecting metrics.</div>
+                )}
+              </div>
           </CardContent>
         </Card>
 
@@ -119,8 +120,9 @@ export function MonitoringView() {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <div className="h-[250px]">
+              {monitorData.alertDistribution.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={alertDistributionData} layout="vertical">
+                <BarChart data={monitorData.alertDistribution} layout="vertical">
                   <XAxis
                     type="number"
                     tick={{ fontSize: 11, fill: 'oklch(0.5 0.02 155)' }}
@@ -145,7 +147,7 @@ export function MonitoringView() {
                     labelStyle={{ color: 'oklch(0.95 0.01 155)' }}
                   />
                   <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                    {alertDistributionData.map((_, index) => (
+                    {monitorData.alertDistribution.map((_, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={`oklch(${0.6 - index * 0.04} 0.15 ${150 + index * 10})`}
@@ -154,6 +156,9 @@ export function MonitoringView() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              ) : (
+              <div className="h-[250px] flex items-center justify-center text-xs text-muted-foreground">No monitoring data yet. Deploy agents to begin collecting metrics.</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -166,11 +171,13 @@ export function MonitoringView() {
             <CardTitle className="text-sm font-semibold">Severity Breakdown</CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
+            {monitorData.severityBreakdown.length > 0 ? (
+            <>
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={severityBreakdownData}
+                    data={monitorData.severityBreakdown}
                     cx="50%"
                     cy="50%"
                     innerRadius={50}
@@ -178,7 +185,7 @@ export function MonitoringView() {
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {severityBreakdownData.map((entry, index) => (
+                    {monitorData.severityBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -194,7 +201,7 @@ export function MonitoringView() {
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
-              {severityBreakdownData.map((item) => (
+              {monitorData.severityBreakdown.map((item) => (
                 <div key={item.name} className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   <span className="text-xs text-muted-foreground">
@@ -203,6 +210,10 @@ export function MonitoringView() {
                 </div>
               ))}
             </div>
+            </>
+            ) : (
+            <div className="h-[200px] flex items-center justify-center text-xs text-muted-foreground">No monitoring data yet. Deploy agents to begin collecting metrics.</div>
+            )}
           </CardContent>
         </Card>
 
@@ -212,8 +223,9 @@ export function MonitoringView() {
             <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
+            {monitorData.activityLog.length > 0 ? (
             <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
-              {activityLogData.map((item, i) => (
+              {monitorData.activityLog.map((item, i) => (
                 <div key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                   <span className="text-xs font-mono text-muted-foreground mt-0.5 shrink-0 w-12">
                     {item.time}
@@ -228,6 +240,9 @@ export function MonitoringView() {
                 </div>
               ))}
             </div>
+            ) : (
+            <div className="h-[250px] flex items-center justify-center text-xs text-muted-foreground">No monitoring data yet. Deploy agents to begin collecting metrics.</div>
+            )}
           </CardContent>
         </Card>
       </div>

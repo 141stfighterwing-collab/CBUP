@@ -7,9 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useAppStore } from '@/lib/store'
-import { dashboardStats, mockAlerts } from '@/lib/mock-data'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
-import { threatTrendData } from '@/lib/mock-data'
 
 const severityColor = {
   critical: 'bg-red-500/10 text-red-500 border-red-500/20',
@@ -59,6 +57,17 @@ export function DashboardView() {
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null)
   const [recentReports, setRecentReports] = useState<RecentReport[]>([])
 
+  const [stats, setStats] = useState({ activeAlerts: 0, criticalAlerts: 0, openTasks: 0, completedTasks: 0, complianceScore: 0, threatLevel: 'LOW' as string, threatScore: 0, recentAlerts: [] as any[], threatTrendData: [] as any[] })
+
+  useEffect(() => {
+    fetch('/api/dashboard/stats')
+      .then(r => r.json())
+      .then((data) => {
+        if (data) setStats(prev => ({ ...prev, ...data }))
+      })
+      .catch(() => {})
+  }, [])
+
   const isSuperAdmin = user?.role === 'super_admin'
   const isAdmin = user?.role === 'admin' || isSuperAdmin
 
@@ -102,8 +111,8 @@ export function DashboardView() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Active Alerts</p>
-                <p className="text-2xl font-bold mt-1">{dashboardStats.activeAlerts}</p>
-                <p className="text-xs text-red-500 mt-1">{dashboardStats.criticalAlerts} critical</p>
+                <p className="text-2xl font-bold mt-1">{stats.activeAlerts}</p>
+                <p className="text-xs text-red-500 mt-1">{stats.criticalAlerts} critical</p>
               </div>
               <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
                 <AlertTriangle className="h-5 w-5 text-red-500" />
@@ -117,8 +126,8 @@ export function DashboardView() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Open Tasks</p>
-                <p className="text-2xl font-bold mt-1">{dashboardStats.openTasks}</p>
-                <p className="text-xs text-muted-foreground mt-1">{dashboardStats.completedTasks} completed</p>
+                <p className="text-2xl font-bold mt-1">{stats.openTasks}</p>
+                <p className="text-xs text-muted-foreground mt-1">{stats.completedTasks} completed</p>
               </div>
               <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <CheckCircle className="h-5 w-5 text-amber-500" />
@@ -132,8 +141,8 @@ export function DashboardView() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Compliance Score</p>
-                <p className="text-2xl font-bold mt-1">{dashboardStats.complianceScore}%</p>
-                <Progress value={dashboardStats.complianceScore} className="mt-2 h-1.5" />
+                <p className="text-2xl font-bold mt-1">{stats.complianceScore}%</p>
+                <Progress value={stats.complianceScore} className="mt-2 h-1.5" />
               </div>
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <ShieldAlert className="h-5 w-5 text-primary" />
@@ -148,9 +157,9 @@ export function DashboardView() {
               <div>
                 <p className="text-xs text-muted-foreground">Threat Level</p>
                 <Badge variant="destructive" className="mt-1.5 text-xs">
-                  {dashboardStats.threatLevel}
+                  {stats.threatLevel}
                 </Badge>
-                <p className="text-xs text-muted-foreground mt-1.5">Score: {dashboardStats.threatScore}/100</p>
+                <p className="text-xs text-muted-foreground mt-1.5">Score: {stats.threatScore}/100</p>
               </div>
               <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5 text-red-500" />
@@ -256,7 +265,7 @@ export function DashboardView() {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <div className="space-y-2">
-              {dashboardStats.recentAlerts.map((alert) => (
+              {stats.recentAlerts.map((alert) => (
                 <div
                   key={alert.id}
                   className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
@@ -357,8 +366,9 @@ export function DashboardView() {
             </CardHeader>
             <CardContent className="p-4 pt-0">
               <div className="h-[120px]">
+                {stats.threatTrendData && stats.threatTrendData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={threatTrendData}>
+                  <LineChart data={stats.threatTrendData}>
                     <XAxis
                       dataKey="date"
                       tick={{ fontSize: 10, fill: 'oklch(0.5 0.02 155)' }}
@@ -389,6 +399,9 @@ export function DashboardView() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+                ) : (
+                <div className="h-[120px] flex items-center justify-center text-xs text-muted-foreground">No trend data yet. Deploy agents to begin monitoring.</div>
+                )}
               </div>
             </CardContent>
           </Card>

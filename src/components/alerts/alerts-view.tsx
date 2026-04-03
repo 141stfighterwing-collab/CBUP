@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, AlertTriangle, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { mockAlerts, type MockAlert } from '@/lib/mock-data'
+
 
 const severityColor: Record<string, string> = {
   critical: 'bg-red-500/10 text-red-500 border-red-500/20',
@@ -22,9 +22,19 @@ const severityDot: Record<string, string> = {
   low: 'bg-green-500',
 }
 
+interface AlertItem {
+  id: string
+  title: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  source: string
+  description: string
+  category: string
+  createdAt: string
+}
+
 const filters = ['all', 'critical', 'high', 'medium', 'low'] as const
 
-function AlertCard({ alert }: { alert: MockAlert }) {
+function AlertCard({ alert }: { alert: AlertItem }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -80,10 +90,22 @@ function AlertCard({ alert }: { alert: MockAlert }) {
 }
 
 export function AlertsView() {
+  const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const filteredAlerts = mockAlerts.filter((alert) => {
+  useEffect(() => {
+    fetch('/api/alerts')
+      .then(r => r.json())
+      .then((data) => {
+        setAlerts(Array.isArray(data) ? data : (data?.alerts || []))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filteredAlerts = alerts.filter((alert) => {
     const matchesSeverity = activeFilter === 'all' || alert.severity === activeFilter
     const matchesSearch = !searchQuery ||
       alert.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -92,11 +114,11 @@ export function AlertsView() {
   })
 
   const counts = {
-    all: mockAlerts.length,
-    critical: mockAlerts.filter(a => a.severity === 'critical').length,
-    high: mockAlerts.filter(a => a.severity === 'high').length,
-    medium: mockAlerts.filter(a => a.severity === 'medium').length,
-    low: mockAlerts.filter(a => a.severity === 'low').length,
+    all: alerts.length,
+    critical: alerts.filter(a => a.severity === 'critical').length,
+    high: alerts.filter(a => a.severity === 'high').length,
+    medium: alerts.filter(a => a.severity === 'medium').length,
+    low: alerts.filter(a => a.severity === 'low').length,
   }
 
   return (
@@ -134,6 +156,7 @@ export function AlertsView() {
           </div>
         </CardHeader>
         <CardContent className="p-4 pt-0">
+          {loading ? <div className="text-center py-8 text-xs text-muted-foreground">Loading alerts...</div> : (
           <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
             {filteredAlerts.length === 0 ? (
               <div className="text-center py-8">
@@ -146,6 +169,7 @@ export function AlertsView() {
               ))
             )}
           </div>
+          )}
         </CardContent>
       </Card>
     </div>
