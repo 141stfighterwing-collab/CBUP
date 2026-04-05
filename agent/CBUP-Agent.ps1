@@ -118,8 +118,30 @@ $script:Config = @{
 # =============================================================================
 # DOT-SOURCE MODULES
 # =============================================================================
+# Determine base path — handles .ps1 scripts, compiled EXE (ps2exe), and
+# packaged deployments.  $PSScriptRoot is empty inside a compiled EXE,
+# so we fall back to the process executable directory.
 
-$modulePath = Join-Path $PSScriptRoot "modules"
+$script:BasePath = $PSScriptRoot
+if ([string]::IsNullOrEmpty($script:BasePath)) {
+    try {
+        $script:BasePath = Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    }
+    catch {
+        try {
+            $script:BasePath = Split-Path -Parent ([System.Environment]::GetCommandLineArgs()[0])
+        }
+        catch {
+            $script:BasePath = (Get-Location).Path
+        }
+    }
+}
+
+$modulePath = Join-Path $script:BasePath "modules"
+
+if (-not (Test-Path $modulePath)) {
+    throw "CRITICAL: Agent modules directory not found: $modulePath. Ensure the modules/ folder exists alongside the agent script or EXE."
+}
 
 . (Join-Path $modulePath "CBUP-Logging.ps1")
 . (Join-Path $modulePath "CBUP-Registry.ps1")

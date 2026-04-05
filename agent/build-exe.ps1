@@ -668,6 +668,30 @@ switch ($Mode) {
 }
 
 # =============================================================================
+# POST-BUILD: Copy modules to output directory
+# =============================================================================
+# The compiled EXE needs the modules/ folder alongside it at runtime
+# ($PSScriptRoot is empty in ps2exe-compiled EXEs, so we use the EXE's
+# directory to locate modules).
+
+if ($buildSuccess -and (Test-Path $script:ModulesDir)) {
+    $distModules = Join-Path $script:FinalOutputDir "modules"
+    Write-Host "[*] Copying agent modules to output directory..." -ForegroundColor Cyan
+
+    if (Test-Path $distModules) { Remove-Item $distModules -Recurse -Force }
+    Copy-Item -Path $script:ModulesDir -Destination $distModules -Recurse -Force
+
+    $moduleCount = (Get-ChildItem -Path $distModules -Filter "*.ps1" -ErrorAction SilentlyContinue).Count
+    Write-Host "    [OK] Copied $moduleCount modules to: $distModules" -ForegroundColor Green
+}
+else {
+    if ($buildSuccess) {
+        Write-Host "[WARN] Modules directory not found at $($script:ModulesDir) — EXE may fail at runtime" -ForegroundColor Yellow
+    }
+}
+Write-Host ""
+
+# =============================================================================
 # SUMMARY
 # =============================================================================
 

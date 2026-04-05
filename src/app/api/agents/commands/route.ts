@@ -21,20 +21,63 @@ const ALLOWED_COMMAND_TYPES = new Set([
 // Rate limiter for POST (admin commands): 20 commands per minute per IP
 const commandPostRateLimit = rateLimit({ maxRequests: 20, windowMs: 60 * 1000 })
 
+// Rate limiter for GET (agent polling): 120 per minute per IP (agent polls every 15s)
+const commandGetRateLimit = rateLimit({ maxRequests: 240, windowMs: 60 * 1000 })
+
 // Max payload size for RUN_CUSTOM_SCRIPT: 1MB
 const MAX_CUSTOM_SCRIPT_PAYLOAD = 1024 * 1024 // 1MB
 
+/**
+ * Extracts agentId and authToken from either:
+ *   - Query parameters (?agentId=xxx&authToken=xxx)
+ *   - HTTP headers (X-Agent-Id + Authorization: Bearer xxx)
+ */
+function extractAgentCredentials(request: NextRequest | Request): {
+  agentId: string | null
+  authToken: string | null
+} {
+  let agentId: string | null = null
+  let authToken: string | null = null
+
+  // Try query params first (backward compatible)
+  if (request instanceof NextRequest || request instanceof Request) {
+    const url = new URL(request.url)
+    agentId = url.searchParams.get('agentId') || url.searchParams.get('agentid')
+    authToken = url.searchParams.get('authToken') || url.searchParams.get('authtoken')
+  }
+
+  // Fall back to headers (the CBUP Agent sends these via Invoke-CBUPApi)
+  if (!agentId) {
+    agentId = request.headers.get('x-agent-id')
+  }
+  if (!authToken) {
+    const authHeader = request.headers.get('authorization')
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      authToken = authHeader.substring(7)
+    }
+  }
+
+  return { agentId, authToken }
+}
+
 // GET /api/agents/commands?agentId=xxx&authToken=xxx
-// Returns pending commands for the agent
+// Returns pending commands for the agent.
+// Supports auth via query params OR headers (X-Agent-Id + Authorization Bearer).
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const agentId = searchParams.get('agentId')
-    const authToken = searchParams.get('authToken')
+    // ─── Rate Limiting ───────────────────────────────────────────────────
+    const clientIp = (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || 'unknown'
+    const rlResult = commandGetRateLimit.check(clientIp)
+    if (!rlResult.allowed) {
+      return rateLimitResponse(rlResult)
+    }
+
+    // ─── Auth: extract from query params or headers ──────────────────────
+    const { agentId, authToken } = extractAgentCredentials(request)
 
     if (!agentId || !authToken) {
       return NextResponse.json(
-        { error: 'Missing required query params: agentId, authToken' },
+        { error: 'Missing required credentials: agentId and authToken (query params or headers)' },
         { status: 400 }
       )
     }
@@ -49,7 +92,7 @@ export async function GET(request: Request) {
     }
 
     // SECURITY: Timing-safe token comparison
-    if (!safeEqual(authToken, agent.authToken)) {
+    if (!safeEqual(authToken, agent.authToken || '')) {
       return NextResponse.json({ error: 'Invalid auth token' }, { status: 401 })
     }
 
@@ -78,9 +121,10 @@ export async function GET(request: Request) {
     const commands = pendingCommands.map((c: { id: string; type: string; payload: string | null }) => ({
       id: c.id,
       type: c.type,
-      payload: c.payload,
+      parameters: c.payload ? JSON.parse(c.payload) : {},
     }))
 
+    // Return in format the agent expects: { commands: [...] }
     return NextResponse.json({ commands })
   } catch (error) {
     console.error('Fetch commands error:', error)
