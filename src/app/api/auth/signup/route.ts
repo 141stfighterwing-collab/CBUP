@@ -10,36 +10,78 @@ import { rateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 const SCRYPT_KEY_LENGTH = 64
 const SALT_LENGTH = 16
 
-/**
- * Hash a password using scrypt with a random salt.
- * Returns hex-encoded "salt:hash" string for storage.
- */
 function hashPassword(password: string): string {
   const salt = randomBytes(SALT_LENGTH).toString('hex')
   const hash = scryptSync(password, salt, SCRYPT_KEY_LENGTH).toString('hex')
   return `${salt}:${hash}`
 }
 
-/**
- * Verify a password against a stored salt:hash string.
- * Returns true if the password matches.
- * Handles backward compatibility: if stored value has no ":", it was plaintext.
- */
 function verifyPassword(password: string, stored: string | null): boolean {
   if (!stored) return false
 
   if (stored.includes(':')) {
-    // Hashed format: salt:hash
     const [salt, hash] = stored.split(':', 2)
     if (!salt || !hash) return false
     const verifyHash = scryptSync(password, salt, SCRYPT_KEY_LENGTH).toString('hex')
     return hash === verifyHash
   }
 
-  // Legacy plaintext format: direct comparison
-  // (existing users who signed up before hashing was added)
+  // Legacy plaintext format
   console.warn('[CBUP SECURITY] Verifying against plaintext password (legacy user). Consider rehashing.')
   return password === stored
+}
+
+// ─── Default Super Admin ─────────────────────────────────────────────────────
+// Auto-created on first login if no admin exists in the database.
+// This ensures the platform is always accessible after a fresh deploy.
+
+const DEFAULT_ADMIN_EMAIL = 'admin@cbup.io'
+const DEFAULT_ADMIN_PASSWORD = 'CBUPadmin2024!'
+const DEFAULT_ADMIN_NAME = 'Platform Admin'
+const DEFAULT_ADMIN_ROLE = 'super_admin'
+const DEFAULT_ADMIN_TIER = 'enterprise'
+
+let adminAutoCreated = false
+
+async function ensureDefaultAdmin(): Promise<void> {
+  if (adminAutoCreated) return
+
+  try {
+    const existing = await db.user.findUnique({ where: { email: DEFAULT_ADMIN_EMAIL } })
+    if (existing) {
+      // If admin exists but has no password, hash the default one
+      if (!existing.password) {
+        const hashed = hashPassword(DEFAULT_ADMIN_PASSWORD)
+        await db.user.update({
+          where: { id: existing.id },
+          data: { password: hashed },
+        })
+        console.log(`[CBUP AUTH] Set default admin password for: ${DEFAULT_ADMIN_EMAIL}`)
+      }
+      adminAutoCreated = true
+      return
+    }
+
+    // Create the default admin with hashed password
+    const hashedPassword = hashPassword(DEFAULT_ADMIN_PASSWORD)
+    await db.user.create({
+      data: {
+        email: DEFAULT_ADMIN_EMAIL,
+        name: DEFAULT_ADMIN_NAME,
+        company: 'Cyber Brief Unified Platform',
+        role: DEFAULT_ADMIN_ROLE,
+        tier: DEFAULT_ADMIN_TIER,
+        password: hashedPassword,
+        settings: JSON.stringify({ theme: 'dark', notifications: true, language: 'en' }),
+      },
+    })
+    console.log(`[CBUP AUTH] Auto-created default super admin: ${DEFAULT_ADMIN_EMAIL}`)
+    adminAutoCreated = true
+  } catch (error) {
+    // If auto-creation fails (e.g., race condition), log and continue
+    console.warn('[CBUP AUTH] Could not auto-create admin (may already exist):', error)
+    adminAutoCreated = true // Don't retry
+  }
 }
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
@@ -58,6 +100,9 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(rlResult)
     }
 
+    // ─── Ensure default admin exists (auto-seed) ─────────────────────────
+    await ensureDefaultAdmin()
+
     const body = await request.json()
     const { email, name, company, password, tier, action } = body
 
@@ -70,7 +115,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
     }
 
-    // ─── Password Strength Validation (for new users and password sets) ──
+    // ─── Password Strength Validation ────────────────────────────────────
     if (password) {
       if (password.length < 8) {
         return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
@@ -80,19 +125,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ─── Determine intent: explicit login vs signup vs auto-detect ───────
+    // ─── Determine intent ────────────────────────────────────────────────
     const isExplicitLogin = action === 'login'
-    const isExplicitSignup = action === 'signup'
 
     // Check if user already exists
     const existing = await db.user.findUnique({ where: { email } })
 
     if (existing) {
       // ─── LOGIN FLOW (existing user) ────────────────────────────────────
-      // Case 1: User has NO password set (null/empty) — allow first-login password set
+      // Case 1: User has NO password set — allow first-login password set
       if (!existing.password) {
         if (password) {
-          // Hash and store the password for this first login
           const hashed = hashPassword(password)
           await db.user.update({
             where: { id: existing.id },
@@ -100,7 +143,6 @@ export async function POST(request: NextRequest) {
           })
           console.log(`[CBUP AUTH] First-login password set for: ${existing.email}`)
         }
-        // Return user data regardless — null password users are pre-seeded
         return NextResponse.json({
           id: existing.id,
           email: existing.email,
@@ -119,7 +161,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
         }
 
-        // Auto-migrate legacy plaintext passwords to hashed on successful login
+        // Auto-migrate legacy plaintext passwords
         if (existing.password && !existing.password.includes(':')) {
           const hashed = hashPassword(password)
           await db.user.update({
@@ -129,11 +171,9 @@ export async function POST(request: NextRequest) {
           console.log(`[CBUP SECURITY] Auto-migrated plaintext password to scrypt for: ${existing.email}`)
         }
       } else {
-        // No password provided for a user who has one
         return NextResponse.json({ error: 'Password is required' }, { status: 401 })
       }
 
-      // Return user data (login flow)
       return NextResponse.json({
         id: existing.id,
         email: existing.email,
@@ -146,11 +186,10 @@ export async function POST(request: NextRequest) {
 
     // ─── SIGNUP FLOW (new user) ──────────────────────────────────────────
     if (isExplicitLogin) {
-      // Explicit login for non-existent user
       return NextResponse.json({ error: 'No account found with this email' }, { status: 401 })
     }
 
-    // Create new user — hash the password before storage
+    // Create new user
     const hashedPassword = password ? hashPassword(password) : null
 
     const user = await db.user.create({
