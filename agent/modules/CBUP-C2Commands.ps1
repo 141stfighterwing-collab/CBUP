@@ -81,7 +81,6 @@ $script:AllowedScriptCommands = @(
     'Export-Csv',
     'ConvertTo-Json',
     'ConvertFrom-Json',
-    'Join-String',
     # Safe operators (not commands, but needed for validation)
     'Write-Output',
     'Write-Host'

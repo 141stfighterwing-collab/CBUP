@@ -39,8 +39,11 @@ function Register-Agent {
     if ($response.agentId) {
         $script:Config.AgentId = $response.agentId
     }
-    if ($response.token -or $response.authToken) {
-        $script:Config.AuthToken = $response.token ?? $response.authToken
+    if ($response.token) {
+        $script:Config.AuthToken = $response.token
+    }
+    elseif ($response.authToken) {
+        $script:Config.AuthToken = $response.authToken
     }
 
     # ── SECURITY: Encrypt AuthToken before persisting to registry (v2.2.0) ──

@@ -41,7 +41,7 @@ function Get-AgentSignature {
     if ($UseHMAC -or $hmacKey) {
         if ($hmacKey) {
             try {
-                $hmac = [System.Security.Cryptography.HMACSHA256]::new([System.Text.Encoding]::UTF8.GetBytes($hmacKey))
+                $hmac = New-Object System.Security.Cryptography.HMACSHA256(,([System.Text.Encoding]::UTF8.GetBytes($hmacKey)))
                 $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
                 $hashBytes = $hmac.ComputeHash($payloadBytes)
                 $fingerprint = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ''

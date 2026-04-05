@@ -7,7 +7,7 @@ import { checkAuth } from '@/lib/auth-check'
 
 // ─── Signature Generation (HMAC-SHA256) ──────────────────────────────────
 
-const CBUP_VERSION = '2.4.0'
+const CBUP_VERSION = '2.5.0'
 const CBUP_SIGNER = 'CBUP Security Engineering'
 
 // HMAC secret generated once at module load, stored in process.env for consistency

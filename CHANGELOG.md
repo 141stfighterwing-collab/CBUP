@@ -5,6 +5,27 @@ All notable changes to the Cyber Brief Unified Platform (CBUP) will be documente
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-04-05
+
+### Fixed
+- **CRITICAL: Agent EXE crashes on startup** — `$PSScriptRoot` is empty inside ps2exe-compiled EXEs, causing all 15 module dot-sources to fail with "Cannot bind argument to Path is null". Fixed by detecting EXE context and falling back to `[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName`.
+- **CRITICAL: Agent modules not bundled with EXE** — `build-exe.ps1` compiled the EXE but never copied the `modules/` directory to `dist/`. Added post-build step to copy all 15 modules alongside the EXE.
+- **CRITICAL: PowerShell 5.1 compatibility** — Replaced all PS 7+ syntax across agent modules:
+  - `??` null coalescing operator → `if/elseif` (CBUP-Registration.ps1)
+  - `[Type]::new()` static constructors → `New-Object` (CBUP-API.ps1, CBUP-Signature.ps1)
+  - Inline `try/catch` inside hashtable values → moved to helper function (CBUP-EDR-Process.ps1)
+  - Removed PS 6+ `Join-String` from C2 command whitelist
+- **Agent registration payload mismatch** — The agent sends `{ hostname, discovery: { OSName, OSVersion }, token }` but the server expected `{ agentId, hostname, osName, osVersion, authToken }` at top level. Server now normalizes both formats and auto-generates `agentId` if not provided.
+- **Agent heartbeat payload mismatch** — The agent sends flat telemetry `{ AgentId, CPUTotalPercent, Memory: { UsedPercent } }` but the server expected `{ agentId, authToken, telemetry: { cpuPercent, memPercent } }`. Server now handles both formats.
+- **C2 command polling auth mismatch** — Agent sends credentials via HTTP headers (`Authorization: Bearer`, `X-Agent-Id`) but server only checked query params. Now accepts both.
+- **C2 command payload key mismatch** — Server returned `{ id, type, payload }` but agent reads `$Command.parameters`. Server now returns `{ id, type, parameters }`.
+- **C2 command result field mismatch** — Agent sends `{ commandId, agentId, output }` but server expected `{ agentId, authToken, commandId, result }`. Server now accepts `output` field and auth from Bearer header.
+- **ps2exe version compatibility** — Added dynamic parameter detection for `ps2exe` module (supports both old and new versions). Fixed GDI+ icon generation for PS 5.1 by explicitly casting pen widths to `[System.Single]`.
+
+### Changed
+- Version bumped across all components (agent, build script, server API, package.json)
+- Agent module loading now has explicit error if modules/ directory is not found
+
 ## [2.4.0] - 2026-04-05
 
 ### Fixed

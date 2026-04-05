@@ -65,7 +65,7 @@ function Invoke-EDRProcessScan {
                 Name        = $proc.Name
                 Path        = $proc.ExecutablePath
                 CommandLine = $proc.CommandLine
-                User        = try { $owner = $proc.GetOwner(); "$($owner.Domain)\$($owner.User)" } catch { "N/A" }
+                User        = Get-WmiProcessOwner -Pid $proc.ProcessId
                 CPU         = [math]::Round($proc.KernelModeTime / 10000000, 1)
                 MemoryMB    = [math]::Round($proc.WorkingSetSize / 1MB, 1)
                 Flags       = $flags

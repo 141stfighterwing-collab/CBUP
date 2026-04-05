@@ -187,8 +187,8 @@ function Invoke-CBUPApi {
                 if ($compressed) {
                     # Gzip compress body
                     $bytes = [System.Text.Encoding]::UTF8.GetBytes($bodyJson)
-                    $ms = [System.IO.MemoryStream]::new()
-                    $gz = [System.IO.Compression.GZipStream]::new($ms, [System.IO.Compression.CompressionLevel]::Optimal)
+                    $ms = New-Object System.IO.MemoryStream
+                    $gz = New-Object System.IO.Compression.GZipStream($ms, [System.IO.Compression.CompressionLevel]::Optimal)
                     $gz.Write($bytes, 0, $bytes.Length)
                     $gz.Close()
                     $params["Body"] = $ms.ToArray()
@@ -207,7 +207,7 @@ function Invoke-CBUPApi {
             $errMsg = $_.Exception.Message
             if ($_.Exception.Response) {
                 try {
-                    $streamReader = [System.IO.StreamReader]::new($_.Exception.Response.GetResponseStream())
+                    $streamReader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
                     $errBody = $streamReader.ReadToEnd()
                     $streamReader.Close()
                     $errMsg = "HTTP $([int]$_.Exception.Response.StatusCode): $errBody"
