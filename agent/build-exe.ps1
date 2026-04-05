@@ -53,7 +53,7 @@ param(
 # CONFIGURATION
 # =============================================================================
 
-$script:AgentVersion = "2.5.0"
+$script:AgentVersion = "2.5.1"
 $script:ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:SourceScript = Join-Path $script:ScriptDir "CBUP-Agent.ps1"
 $script:ModulesDir = Join-Path $script:ScriptDir "modules"

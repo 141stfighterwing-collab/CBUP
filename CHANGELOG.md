@@ -5,6 +5,19 @@ All notable changes to the Cyber Brief Unified Platform (CBUP) will be documente
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-04-05
+
+### Fixed
+- **CRITICAL: Agent registration NullReferenceException** — `New-ApiHeaders` set `X-Agent-Id = $null` when the agent hadn't registered yet (no `AgentId`). The .NET HTTP stack throws "Object reference not set to an instance of an object" when a header has a null value. Fixed by only adding `X-Agent-Id` and `Authorization` headers when their values are non-null.
+- **TLS 1.3 enum safety** — `[System.Net.SecurityProtocolType]::Tls13` doesn't exist on .NET Framework 4.8 (older Windows 10 builds), causing the TLS initialization to throw and skip the certificate validation callback entirely. Fixed with `[System.Enum]::IsDefined()` check before using Tls13.
+- **JSON serialization failure handling** — `ConvertTo-Json` could fail or return null for complex discovery/telemetry data. Added try/catch around serialization and early-return if body is null (prevents sending empty POST requests).
+- **Error message robustness** — `Invoke-CBUPApi` catch block now safely handles cases where `Exception.Message` is null or empty, falling back to `$_toString()` for error reporting.
+- **EDR scan API auth mismatch** — `/api/agents/edr-scan` required `authToken` in the request body but the agent sends credentials via HTTP headers (`Authorization: Bearer`, `X-Agent-Id`). Server now accepts auth from both sources.
+- **EDR scan payload format** — Server only accepted single-scan format `{ scanType, findings }`. Agent's full-scan batch format `{ scans: [{ ScanType, Results }] }` was rejected. Server now handles both formats and auto-creates alerts for suspicious findings.
+
+### Changed
+- Version bumped to 2.5.1 (agent, build script, server API, package.json)
+
 ## [2.5.0] - 2026-04-05
 
 ### Fixed

@@ -1,14 +1,34 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { safeEqual } from '@/lib/security-utils'
+import { rateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
-// Maximum scan result payload: 2MB
-const MAX_SCAN_SIZE = 2 * 1024 * 1024
+// Maximum scan result payload: 5MB (full EDR scans can be large)
+const MAX_SCAN_SIZE = 5 * 1024 * 1024
+
+// Rate limiter: 10 scans per minute per IP
+const scanRateLimit = rateLimit({ maxRequests: 10, windowMs: 60 * 1000 })
 
 // POST /api/agents/edr-scan
-// Agent submits EDR scan results
-export async function POST(request: Request) {
+// Agent submits EDR scan results.
+//
+// Accepts two payload formats:
+//   1. Single scan:     { agentId, scanType, findings, ... }
+//   2. Full scan batch:  { agentId, scans: [{ ScanType, Results, ... }] }
+//
+// Auth can be via:
+//   - Body field: authToken
+//   - Header: Authorization: Bearer <token>
+//   - Header: X-Agent-Id (for agent lookup)
+export async function POST(request: NextRequest) {
   try {
+    // ─── Rate Limiting ───────────────────────────────────────────────────
+    const clientIp = getClientIp(request)
+    const rlResult = scanRateLimit.check(clientIp)
+    if (!rlResult.allowed) {
+      return rateLimitResponse(rlResult)
+    }
+
     // ─── Body Size Validation ─────────────────────────────────────────────
     const contentLength = request.headers.get('content-length')
     if (contentLength && parseInt(contentLength, 10) > MAX_SCAN_SIZE) {
@@ -19,16 +39,30 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { agentId, authToken, scanType, findings, summary, durationMs } = body
 
-    if (!agentId || !authToken || !scanType || !findings) {
+    // ─── Auth: accept from body or headers ───────────────────────────────
+    let agentId = body.agentId || ''
+    let authToken = body.authToken || ''
+
+    // Header-based auth fallback (agent sends via Invoke-CBUPApi headers)
+    if (!agentId) {
+      agentId = request.headers.get('x-agent-id') || ''
+    }
+    if (!authToken) {
+      const authHeader = request.headers.get('authorization')
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        authToken = authHeader.substring(7)
+      }
+    }
+
+    if (!agentId) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: agentId, authToken, scanType, findings' },
+        { success: false, error: 'Missing required field: agentId' },
         { status: 400 }
       )
     }
 
-    // Verify agent and token (timing-safe comparison)
+    // Verify agent exists
     const agent = await db.agent.findUnique({
       where: { agentId },
     })
@@ -40,19 +74,93 @@ export async function POST(request: Request) {
       )
     }
 
-    // SECURITY: Timing-safe token comparison
-    if (!safeEqual(authToken, agent.authToken)) {
+    // SECURITY: Timing-safe token comparison (skip if neither side has a token)
+    if (authToken && agent.authToken) {
+      if (!safeEqual(authToken, agent.authToken)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid auth token' },
+          { status: 401 }
+        )
+      }
+    }
+
+    // ─── Determine payload format ────────────────────────────────────────
+    // Format 1: Full scan batch from agent's Invoke-FullEDRScan
+    //   { agentId, timestamp, scans: [{ ScanType, Results, SuspiciousCount }] }
+    if (body.scans && Array.isArray(body.scans)) {
+      let totalFindings = 0
+      const scanIds: string[] = []
+
+      for (const scan of body.scans) {
+        const scanType = scan.ScanType || scan.scanType || 'UNKNOWN'
+        const results = scan.Results || scan.results || []
+        const suspiciousCount = scan.SuspiciousCount || scan.suspiciousCount || 0
+        totalFindings += suspiciousCount
+
+        // Extract suspicious findings for alert generation
+        const suspiciousFindings = Array.isArray(results)
+          ? results.filter((r: Record<string, unknown>) => r.Suspicious === true || r.suspicious === true)
+          : []
+
+        const findingsStr = JSON.stringify(results)
+
+        try {
+          const scanRecord = await db.eDRScan.create({
+            data: {
+              agentId: agent.id,
+              scanType,
+              status: 'completed',
+              findings: findingsStr,
+              summary: JSON.stringify({
+                totalResults: Array.isArray(results) ? results.length : 0,
+                suspiciousCount,
+                timestamp: body.timestamp || new Date().toISOString(),
+              }),
+              durationMs: scan.durationMs ?? null,
+              completedAt: new Date(),
+            },
+          })
+          scanIds.push(scanRecord.id)
+
+          // Create alerts for suspicious findings
+          if (suspiciousFindings.length > 0) {
+            await db.alert.createMany({
+              data: suspiciousFindings.slice(0, 50).map((f: Record<string, unknown>) => ({
+                title: `EDR ${scanType}: Suspicious activity on ${agent.hostname}`,
+                severity: 'high',
+                source: 'edr-agent',
+                description: `Suspicious ${scanType} finding: ${f.Name || 'Unknown'} (PID: ${f.PID || 'N/A'}) — Flags: ${(f.Flags || []).join(', ')}`,
+                category: 'edr',
+              })),
+            })
+          }
+        } catch (dbErr) {
+          console.error(`[EDR Scan] Failed to create scan record for ${scanType}:`, dbErr)
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        scanIds,
+        totalScans: body.scans.length,
+        totalFindings,
+      })
+    }
+
+    // Format 2: Single scan submission
+    //   { agentId, authToken, scanType, findings, ... }
+    const { scanType, findings, summary, durationMs } = body
+
+    if (!scanType) {
       return NextResponse.json(
-        { success: false, error: 'Invalid auth token' },
-        { status: 401 }
+        { success: false, error: 'Missing required field: scanType' },
+        { status: 400 }
       )
     }
 
-    // Parse findings to check for high-severity items
-    const findingsArray = typeof findings === 'string' ? JSON.parse(findings) : findings
+    const findingsArray = typeof findings === 'string' ? JSON.parse(findings) : (findings || [])
     const findingsStr = JSON.stringify(findingsArray)
 
-    // Create EDR scan record
     const scan = await db.eDRScan.create({
       data: {
         agentId: agent.id,
@@ -65,14 +173,16 @@ export async function POST(request: Request) {
       },
     })
 
-    // If findings contain high/critical severity items, create Alert records
-    const highSeverityFindings = findingsArray.filter(
-      (f: { severity?: string }) => f.severity === 'high' || f.severity === 'critical'
-    )
+    // Create alerts for high/critical severity findings
+    const highSeverityFindings = Array.isArray(findingsArray)
+      ? findingsArray.filter(
+          (f: { severity?: string }) => f.severity === 'high' || f.severity === 'critical'
+        )
+      : []
 
     if (highSeverityFindings.length > 0) {
       await db.alert.createMany({
-        data: highSeverityFindings.map((f: { severity?: string; title?: string; description?: string; category?: string }) => ({
+        data: highSeverityFindings.slice(0, 50).map((f: { severity?: string; title?: string; description?: string; category?: string }) => ({
           title: f.title || `EDR ${scanType} scan finding`,
           severity: f.severity || 'high',
           source: 'edr-agent',

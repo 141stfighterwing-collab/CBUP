@@ -3,7 +3,7 @@
 <div align="center">
 
 ![CBUP Banner](https://img.shields.io/badge/CBUP-Cyber%20Brief%20Unified%20Platform-00C853?style=for-the-badge&logo=shield&logoColor=white)
-![Version](https://img.shields.io/badge/version-2.4.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-2.5.1-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![Next.js](https://img.shields.io/badge/Next.js-16.1-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -430,6 +430,52 @@ docker run -d --name cbup-agent --restart unless-stopped \
   -e CBUP_AUTH_TOKEN='TENANT_TOKEN' \
   cbup/agent:latest
 ```
+
+### Building and Testing the Windows EXE
+
+The agent can be compiled to a standalone `.exe` using the included `build-exe.ps1` script:
+
+```powershell
+# Prerequisites: PowerShell 5.1+, ps2exe module
+# Install ps2exe if not already installed:
+Install-Module -Name ps2exe -Scope CurrentUser -Force
+
+# Build from the agent directory (server must be running)
+cd agent
+.\build-exe.ps1
+
+# The EXE and modules will be in agent/dist/
+```
+
+**Running the agent in development mode (testing):**
+
+```powershell
+# IMPORTANT: Use your ACTUAL server URL, NOT the example URL!
+# The example URL (cbup.example.com) is a placeholder and will NOT work.
+
+# Correct — localhost development server:
+.\CBUP-Agent.exe -ServerUrl http://localhost:3001 -DevMode
+
+# Correct — production server with TLS:
+.\CBUP-Agent.exe -ServerUrl https://your-cbup-server.com -DevMode
+
+# WRONG — this is a placeholder URL, it will NOT connect:
+.\CBUP-Agent.exe -ServerUrl https://cbup.example.com -DevMode
+```
+
+**Expected successful startup output:**
+
+```
+[INFO] TLS: TLS 1.2 not available... (or TLS 1.3 available...)
+[INFO] TLS: Certificate pinning NOT configured...
+[INFO] Starting CBUP Agent...
+[INFO] Registering agent with CBUP portal...
+[INFO] System discovery completed. Hostname=YOUR-PC, OS=Microsoft Windows 10 Pro
+[INFO] Agent registered successfully. AgentId=CBUP-YOURPC-xxxx-xxxx
+[INFO] Heartbeat sent. CPU=x%, RAM=y%, Processes=z
+```
+
+> **Troubleshooting:** If you see "Object reference not set to an instance of an object" errors, ensure you are using the correct `ServerUrl` for your running CBUP server. The agent must be able to reach the server at the specified URL.
 
 See [docs/HOWTO.md](docs/HOWTO.md#endpoint-agent-deployment) for the full deployment guide.
 

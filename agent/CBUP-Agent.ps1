@@ -73,7 +73,7 @@ param(
 # CONFIGURATION
 # =============================================================================
 
-$script:AgentVersion = "2.5.0"
+$script:AgentVersion = "2.5.1"
 $script:RegKeyPath = "HKLM:\SOFTWARE\CBUP"
 $script:ServiceName = "CBUPAgent"
 $script:ServiceDisplayName = "CBUP Monitoring Agent"

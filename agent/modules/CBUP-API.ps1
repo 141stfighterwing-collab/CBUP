@@ -22,8 +22,18 @@ function Initialize-TLSSecurity {
         Called during agent initialization to set up the validation callback.
     #>
     try {
-        # Ensure TLS 1.2+ is used
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+        # Ensure TLS 1.2 is used (minimum). TLS 1.3 enum may not exist in .NET Framework 4.8
+        # on older Windows 10 builds, so check before using it.
+        $tlsProtocol = [System.Net.SecurityProtocolType]::Tls12
+        $tls13Exists = [System.Enum]::IsDefined([System.Net.SecurityProtocolType], "Tls13")
+        if ($tls13Exists) {
+            $tlsProtocol = $tlsProtocol -bor [System.Net.SecurityProtocolType]::Tls13
+            Write-CBUPLog "TLS: TLS 1.3 available and enabled." -Level DEBUG
+        }
+        else {
+            Write-CBUPLog "TLS: TLS 1.3 not available on this system. Using TLS 1.2." -Level DEBUG
+        }
+        [System.Net.ServicePointManager]::SecurityProtocol = $tlsProtocol
 
         # Check if a pinned certificate thumbprint is configured via registry
         if (Test-Path $script:RegKeyPath) {
@@ -110,13 +120,20 @@ function New-ApiHeaders {
     <#
     .SYNOPSIS
         Builds authentication headers for API requests.
+        Only includes X-Agent-Id and Authorization when values are available.
+        Null header values cause NullReferenceException in .NET HTTP stack.
     #>
     $headers = @{
-        "Content-Type"  = "application/json"
-        "User-Agent"    = "CBUP-Agent/$($script:AgentVersion)"
-        "X-Agent-Id"    = $script:Config.AgentId
+        "Content-Type"    = "application/json"
+        "User-Agent"      = "CBUP-Agent/$($script:AgentVersion)"
         "X-Agent-Version" = $script:AgentVersion
     }
+    # Only add X-Agent-Id when the agent has registered and has an ID.
+    # Sending a null value causes: "Object reference not set to an instance of an object"
+    if ($script:Config.AgentId) {
+        $headers["X-Agent-Id"] = $script:Config.AgentId
+    }
+    # Only add Authorization header when a token is available
     if ($script:Config.AuthToken) {
         $headers["Authorization"] = "Bearer $($script:Config.AuthToken)"
     }
@@ -162,7 +179,17 @@ function Invoke-CBUPApi {
     $compressed = $false
 
     if ($Body) {
-        $bodyJson = $Body | ConvertTo-Json -Depth 10 -Compress
+        try {
+            $bodyJson = $Body | ConvertTo-Json -Depth 10 -Compress
+        }
+        catch {
+            Write-CBUPLog "JSON serialization failed: $_" -Level ERROR
+            $bodyJson = $null
+        }
+        if ($null -eq $bodyJson) {
+            Write-CBUPLog "API $Method $Endpoint failed: Body serialization produced null. Cannot send request." -Level ERROR
+            return $null
+        }
         # Use compression if payload exceeds 4KB
         if ($UseCompression -and $bodyJson.Length -gt 4096) {
             $compressed = $true
@@ -204,7 +231,10 @@ function Invoke-CBUPApi {
             return $response
         }
         catch {
-            $errMsg = $_.Exception.Message
+            $errMsg = "Unknown error"
+            if ($_.Exception) { $errMsg = $_.Exception.Message }
+            if ([string]::IsNullOrEmpty($errMsg)) { $errMsg = $_.ToString() }
+
             if ($_.Exception.Response) {
                 try {
                     $streamReader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
